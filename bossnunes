@@ -1,0 +1,65 @@
+# app.py
+
+from flask import Flask, jsonify, request
+import pandas as pd
+import ta
+
+app = Flask(__name__)
+
+# Dados de exemplo de pares de moeda Forex
+currencies = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD']
+
+# Função para gerar sinais de entrada
+def generate_signal(currency_pair):
+    # Obter dados históricos do par de moeda
+    df = pd.DataFrame({
+        'close': [1.1234, 1.1235, 1.1230, 1.1231, 1.1233],
+        'timestamp': ['2024-06-26T14:30:00Z', '2024-06-26T14:31:00Z', '2024-06-26T14:32:00Z', '2024-06-26T14:33:00Z', '2024-06-26T14:34:00Z']
+    })
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # Calcular indicadores técnicos
+    df['sma_20'] = ta.trend.sma_indicator(df['close'], window=20)
+    df['rsi'] = ta.momentum.rsi_indicator(df['close'], window=14)
+
+    # Gerar sinal de negociação
+    last_row = df.iloc[-1]
+    if last_row['close'] > last_row['sma_20'] and last_row['rsi'] < 30:
+        signal_type = 'buy'
+    elif last_row['close'] < last_row['sma_20'] and last_row['rsi'] > 70:
+        signal_type = 'sell'
+    else:
+        signal_type = None
+
+    return {
+        'currency_pair': currency_pair,
+        'signal_type': signal_type,
+        'timestamp': last_row['timestamp'].isoformat(),
+        'price': last_row['close'],
+        'indicators': {
+            'sma_20': last_row['sma_20'],
+            'rsi': last_row['rsi']
+        }
+    }
+
+# Endpoint para obter a lista de pares de moeda
+@app.route('/currencies', methods=['GET'])
+def get_currencies():
+    return jsonify(currencies)
+
+# Endpoint para obter os sinais de negociação
+@app.route('/signals', methods=['GET'])
+def get_signals():
+    signals = [generate_signal(currency) for currency in currencies]
+    return jsonify(signals)
+
+# Endpoint para receber webhook de novos sinais
+@app.route('/webhook', methods=['POST'])
+def receive_signal():
+    signal = request.get_json()
+    # Processar o sinal recebido e enviar para a plataforma de negociação
+    print(signal)
+    return jsonify({'message': 'Signal received'}), 200
+
+if __name__ == '__main__':
+    app.run()
